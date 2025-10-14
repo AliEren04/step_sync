@@ -4,12 +4,19 @@ Step Sync is a Flutter package that uses the accelerometer and mathematical calc
 
 ## Installation
 
-To use Step Sync in your Flutter project, add the following line to your `pubspec.yaml` file:
+To use Step Sync in your Flutter project, add the following line to your `pubspec.yaml` file or flutter pub add step_sync then flutter pub get:
 
 ```yaml
 dependencies:
   step_sync: ^3.0.0  # Use the latest version
 ```
+
+## Features (v3)
+- **Highly Accurate**: Filters out minor shakes, desk movements, and phone lifts.
+- **Background Support**: Runs in the background on Android; foreground-only on iOS (system constraints).
+- **Simple API**: Easy to integrate and use.
+- **Reset Steps**: Clear your step count anytime.
+- **Lightweight**: No heavy dependencies or complex permissions.
 
 
 Here's what you need to do for both platforms:
@@ -37,85 +44,96 @@ To access the accelerometer, you don't need to specify a permission. However, yo
 Example User Interface
 ```dart
 import 'package:flutter/material.dart';
-import 'package:step_sync/step_sync.dart'; // Import your package
+import 'package:step_sync/step_sync.dart';
+import 'dart:async';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
+/// Root of the app
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Step Counter',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: StepCounterScreen(),
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const StepCounterScreen(),
     );
   }
 }
 
+/// Screen that displays the step count
 class StepCounterScreen extends StatefulWidget {
+  const StepCounterScreen({super.key});
+
   @override
-  _StepCounterScreenState createState() => _StepCounterScreenState();
+  State<StepCounterScreen> createState() => _StepCounterScreenState();
 }
 
 class _StepCounterScreenState extends State<StepCounterScreen> {
-  // Create an instance of StepCounter
-  final StepCounter stepCounter = StepCounter();
+  final StepCounter stepCounter = StepCounter(); // Instance from the library
 
   @override
   void initState() {
     super.initState();
-    stepCounter.updateSteps();  // Start listening to step updates
+    stepCounter.updateSteps(); // Start listening for step updates
   }
 
   @override
   void dispose() {
+    stepCounter.dispose(); // Clean up resources when screen is removed
     super.dispose();
-    // No need to call dispose() on the StepCounter instance
+  }
+
+  /// Optional: Throttle updates if steps are coming too fast
+  Stream<int> get throttledStepStream {
+    // Example: Only emit every 5 steps to reduce UI rebuilds
+    return stepCounter.stepStream.transform(
+      StreamTransformer.fromHandlers(
+        handleData: (stepCount, sink) {
+          if (stepCount % 5 == 0) {
+            sink.add(stepCount);
+          }
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Step Counter'),
-      ),
+      appBar: AppBar(title: const Text('Step Counter')),
       body: Center(
         child: StreamBuilder<int>(
-          stream: stepCounter.stepStream, // Listen to the step count stream
+          // Use the throttled stream or stepCounter.stepStream directly
+          stream: throttledStepStream,
+          initialData: 0, // Show 0 immediately before first stream value
           builder: (context, snapshot) {
-            // Handle the stream's data
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return CircularProgressIndicator();
-            } else if (snapshot.hasError) {
+            // Error handling
+            if (snapshot.hasError) {
               return Text('Error: ${snapshot.error}');
-            } else if (snapshot.hasData) {
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  // Display the current step count
-                  Text(
-                    'Steps Taken: ${snapshot.data}',
-                    style: TextStyle(fontSize: 24),
-                  ),
-                  SizedBox(height: 20),
-                  // Button to reset the step count
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        stepCounter.resetSteps();  // Reset step count when the button is pressed
-                      });
-                    },
-                    child: Text('Reset Steps'),
-                  ),
-                ],
-              );
-            } else {
-              return Text('No data available');
             }
+
+            // Safely get the current step count
+            final steps = snapshot.data ?? 0;
+
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  'Steps Taken: $steps',
+                  style: const TextStyle(fontSize: 24),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: stepCounter.resetSteps, // Reset steps to 0
+                  child: const Text('Reset Steps'),
+                ),
+              ],
+            );
           },
         ),
       ),
